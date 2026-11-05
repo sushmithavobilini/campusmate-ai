@@ -2,70 +2,60 @@ import re
 from src.tools import calculate_budget, find_policy, compare_venues, request_booking
 
 class CampusMateAgent:
-    """Rule-based agent loop: detects intent, invokes Python tools, evaluates constraints, and requests approval."""
+    """Local rule-based agent workflow: routes requests to policy, calculator and event-planning tools."""
     def run(self, prompt):
-        q = prompt.lower()
+        q = prompt.lower().strip()
         events, pending = [], None
 
-        # Policy question route (retrieval tool)
-        policy_terms = ["leave", "attendance", "medical", "library", "hostel", "curfew", "caterer", "hod", "faculty", "policy"]
-        if any(t in q for t in policy_terms) and not any(t in q for t in ["plan", "fest", "event", "venue", "budget"]):
-            result = find_policy(prompt)
-            events.append({"status":"TOOL_EXECUTED","tool":"retrieve_policy","arguments":{"question":prompt},"result":result})
-            if not result["found"]:
-                return "I couldn't find this information in the CampusMate knowledge base. I won't guess the answer.", events, None
-            return f"**Retrieved from: {result['chunk']}**\n\n{result['text']}", events, None
+        policy_terms = ["leave", "attendance", "medical", "sick", "library", "hostel", "curfew", "caterer", "hod", "faculty", "policy", "coordinator", "venue request", "10 days"]
+        event_terms = ["plan", "fest", "event", "venue", "booking", "budget", "participant", "students"]
+        is_event = any(t in q for t in event_terms)
 
-        # Calculator route
-        if any(t in q for t in ["calculate", "what is", "multiply", "budget"]) and not any(t in q for t in ["plan", "fest", "event", "venue"]):
+        # Handle direct arithmetic without confusing the numbers in policy/event prompts.
+        if any(t in q for t in ["multiply", "calculate", "percent of", "what is"]):
             nums = [int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", prompt)]
             if len(nums) >= 2 and ("multiply" in q or "percent" in q or "%" in q):
                 if "multiply" in q:
-                    result = {"calculation": f"{nums[0]} × {nums[1]}", "answer": nums[0]*nums[1]}
+                    value = nums[0] * nums[1]
+                    result = {"calculation": f"{nums[0]} × {nums[1]}", "answer": value}
                 else:
-                    result = {"calculation": f"{nums[0]}% of {nums[1]}", "answer": nums[0]*nums[1]/100}
-                events.append({"status":"TOOL_EXECUTED","tool":"calculator","arguments":{"numbers":nums},"result":result})
+                    value = nums[0] * nums[1] / 100
+                    result = {"calculation": f"{nums[0]}% of {nums[1]}", "answer": value}
+                events.append({"status":"TOOL_EXECUTED","tool":"calculator","arguments":{"numbers":nums[:2]},"result":result})
                 return f"**Calculation:** {result['calculation']} = **{result['answer']:,.2f}**", events, None
 
-        # Event planning route
-        if any(t in q for t in ["plan", "fest", "event", "venue", "booking"]):
+        # Event planning takes priority when the query is about the fest.
+        if is_event:
             nums = [int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", prompt)]
-            participants = 120
-            budget = 60000
-            if nums:
-                if any(word in q for word in ["students", "participants", "people"]):
-                    participants = nums[0]
-                if "budget" in q and len(nums) > 1:
-                    budget = nums[-1]
+            participants, budget = 120, 60000
+            if any(w in q for w in ["students", "participants", "people"]):
+                if nums: participants = nums[0]
+            if "budget" in q and nums:
+                budget = nums[-1]
             comparison = compare_venues(participants, budget)
             events.append({"status":"TOOL_EXECUTED","tool":"compare_venues","arguments":{"participants":participants,"budget":budget},"result":comparison})
             fixed = calculate_budget(participants)["fixed_cost"]
-            viable = [x for x in comparison if x["available"] and x["capacity"] >= participants and x["cost"] <= budget]
-            lines = [
-                f"## Event plan for {participants} students",
-                f"**Budget:** ₹{budget:,}",
-                f"**Fixed event costs:** ₹{fixed:,} (lunch, snacks, speaker, printing and prizes)",
-                "",
-                "| Venue | Date | Total | Status |",
-                "|---|---|---:|---|"
-            ]
+            lines = [f"## Event plan for {participants} students", f"**Budget:** ₹{budget:,}", f"**Fixed costs:** ₹{fixed:,}", "", "| Venue | Date | Estimated total | Availability | Assessment |", "|---|---|---:|---|---|"]
             for x in comparison:
-                lines.append(f"| {x['venue']} | {x['date']} | ₹{x['cost']:,} | {x['status']} |")
-            lines += ["", "**Policy check:** Events above 100 participants need HoD approval and a named faculty coordinator. Venue requests must be made 10 days ahead. As the planning date is 5 November 2026, neither 13 nor 14 November meets the 10-day requirement without an approved exception."]
+                lines.append(f"| {x['venue']} | {x['date']} | ₹{x['cost']:,} | {'Free' if x['available'] else 'Booked'} | {x['status']} |")
+            lines += ["", "**Policy checks:** More than 100 participants requires HoD approval and a named faculty coordinator. Venue requests must be made 10 days ahead. As planning is on 5 November 2026, the normal deadlines for 13 and 14 November have passed; an authorised exception is required."]
+            viable = [x for x in comparison if x["available"] and x["capacity"] >= participants and x["cost"] <= budget]
             if viable:
                 preferred = sorted(viable, key=lambda x: (not x["av"], x["cost"]))[0]
-                lines += ["", f"**Recommended option:** {preferred['venue']} on {preferred['date']}.",
-                          f"Total estimated cost: ₹{preferred['cost']:,}; remaining budget: ₹{budget-preferred['cost']:,}.",
-                          "This is a conditional recommendation. Confirm the faculty coordinator, HoD approval, venue deadline and operational suitability before booking."]
-            else:
-                lines += ["", "**Recommendation:** No option currently satisfies all constraints. Revise the date, budget or requirements."]
-            if "book" in q:
-                if viable:
-                    preferred = sorted(viable, key=lambda x: (not x["av"], x["cost"]))[0]
+                lines += ["", f"**Initial recommendation:** {preferred['venue']} on {preferred['date']}. Total ₹{preferred['cost']:,}; remaining ₹{budget-preferred['cost']:,}.", "This is conditional. Confirm approvals, the deadline exception and operational suitability before booking."]
+                if "book" in q:
                     pending = request_booking(preferred["venue"], preferred["date"], participants, budget)
                     events.append({"status":"TOOL_EXECUTED","tool":"request_booking","arguments":{"venue":preferred["venue"],"date":preferred["date"],"participants":participants,"budget":budget},"result":pending})
-                    lines += ["", "A simulated booking request is ready, but no booking has been made. Human approval is required."]
+                    lines.append("A simulated booking request is pending human approval. No actual venue has been booked.")
+            else:
+                lines += ["", "**Recommendation:** No venue currently satisfies all the selected constraints. Change the date, budget or requirements."]
             return "\n".join(lines), events, pending
 
-        return ("I can help with event planning, venue comparison, budget calculations and the supplied faculty/student policies. "
-                "Try asking me to plan the Agentic AI Fest or ask a policy question."), events, None
+        if any(t in q for t in policy_terms):
+            result = find_policy(prompt)
+            events.append({"status":"TOOL_EXECUTED","tool":"retrieve_policy","arguments":{"question":prompt},"result":result})
+            if not result["found"]:
+                return "I couldn't verify this from the supplied BBA assignment policies, so I won't guess. The hostel curfew, for example, is not included in the knowledge base.", events, None
+            return f"**Source: {result['chunk']}**\n\n{result['text']}", events, None
+
+        return ("I can help with the Agentic AI Fest plan, venue and budget comparisons, approval requirements, faculty leave, student attendance and library timings. Try one of the example questions.", events, None)

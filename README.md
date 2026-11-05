@@ -1,34 +1,28 @@
-# CampusMate (No-API version)
+# CampusMate — BBA Agentic AI Fest Planner
 
-A Streamlit application that runs without API keys, paid AI services or external model connections.
+A Streamlit academic prototype focused only on the BBA Department's one-day Agentic AI Fest assignment.
 
-## What it does
-- Rule-based intent routing for the assignment's common requests.
-- Python tools for calculations, venue comparison, policy retrieval and simulated booking requests.
-- Multi-step event evaluation and alternative venue checks.
-- Human approval before simulated booking confirmation.
-- SQLite audit log.
+## Features
+- Dashboard with event budget, participants, fixed costs and planning alerts.
+- Helpdesk for the supplied university policies and simple calculations.
+- Fest planner with fixed-cost calculation, venue/date comparison, weather notes, deadline checks and fallback planning.
+- Approval checklist, simulated booking gate and SQLite audit log with CSV export.
+- Searchable policy knowledge base.
+- Failure simulation for Seminar Hall A and reset control.
 
 ## Important limitation
-This is an agentic workflow prototype, not an LLM-powered generative AI system. It uses rules and Python functions, so it understands a limited set of phrasings. Do not describe it as a Claude/Gemini-powered AI. It demonstrates tool use, planning, constraints, failure recovery and human-in-the-loop control.
+This version does **not** use an API or external language model. It is a rule-based agentic workflow prototype: Python functions perform calculations, retrieve policy text, compare constraints and record simulated actions. It is not an unrestricted generative AI chatbot. All bookings and approvals are simulations; no real university office, venue or supplier is contacted.
 
-## Run on Streamlit Community Cloud
-1. Upload all files and folders to a public GitHub repository.
-2. Open https://share.streamlit.io/
-3. Click **Create app**.
-4. Select the repository, branch `main`, and main file path `app.py`.
-5. Click **Deploy**.
+## Run locally
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
 
-No secrets or API keys are required.
+## Deploy on Streamlit Community Cloud
+1. Upload all files and folders to the root of your GitHub repository, preserving the `src/` folder.
+2. Set the app entry point to `app.py`.
+3. Streamlit installs packages from `requirements.txt`.
 
-## Local run
-Install Python, then run:
-`pip install -r requirements.txt`
-`streamlit run app.py`
-
-## Tests
-- "Plan a one-day Agentic AI Fest for 120 students on 13 or 14 November with a budget of 60000."
-- "How much casual leave can faculty take?"
-- "What time is the hostel curfew?"
-- Click the failure simulation button, then ask CampusMate to replan the fest.
-- "Book the recommended venue" to generate a pending request; approve or reject in the UI.
+## Assignment data
+The app uses the assignment's 120 participants, ₹60,000 budget, 13/14 November 2026 dates, venue capacities and rates, fixed costs, weather notes and four supplied policy areas. It flags that the 10-day venue-request deadline has passed as of 5 November 2026.
