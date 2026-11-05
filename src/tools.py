@@ -54,7 +54,7 @@ def simulate_seminar_failure():
     VENUES["Seminar Hall A"]["availability"]["2026-11-14"] = "booked"
     return {"message": "Seminar Hall A marked booked on both dates."}
 
-def reset_venues():
+def reset_venue_data():
     for name, dates in ORIGINAL_AVAILABILITY.items():
         VENUES[name]["availability"] = dates.copy()
     return {"message": "Original availability restored."}
